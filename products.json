@@ -1,0 +1,4 @@
+{
+  "product_50": { "diamond": 50, "stock": 10, "server_id": "server_01" },
+  "product_100": { "diamond": 100, "stock": 5, "server_id": "server_02" }
+}
