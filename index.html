@@ -1,1 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diamond Top-up</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+    body {
+        font-family: 'Inter', sans-serif;
+        background: linear-gradient(135deg, #f0f4ff, #d9e4ff);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+    }
+    .container {
+        background: #fff;
+        padding: 40px 30px;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+    }
+    h1 { margin-bottom: 20px; color: #1a202c; }
+    input[type="text"], select {
+        width: 100%;
+        padding: 12px 15px;
+        margin-bottom: 20px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        font-size: 16px;
+    }
+    button {
+        padding: 12px 25px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(90deg, #4f46e5, #6366f1);
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+    #result {
+        margin-top: 20px;
+        font-size: 16px;
+        min-height: 40px;
+        color: #1a202c;
+        white-space: pre-line;
+    }
+</style>
+</head>
+<body>
 
+<div class="container">
+    <h1>💎 Buy Diamonds</h1>
+    <input type="text" id="gameId" placeholder="Enter Game ID" />
+    <select id="productSelect">
+        <option value="product_50">50 Diamonds</option>
+        <option value="product_100">100 Diamonds</option>
+    </select>
+    <button id="buyBtn">Buy</button>
+    <div id="result"></div>
+</div>
+
+<script>
+document.getElementById("buyBtn").addEventListener("click", async () => {
+    const userId = document.getElementById("gameId").value.trim();
+    const productId = document.getElementById("productSelect").value;
+    const quantity = 1;
+
+    if (!userId) return alert("Enter Game ID!");
+
+    const resultDiv = document.getElementById("result");
+    resultDiv.innerText = "⏳ Checking stock...";
+
+    try {
+        const response = await fetch("/api/get_stock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: userId, product_id: productId, quantity })
+        });
+        const data = await response.json();
+
+        if (data.status === "OK") {
+            resultDiv.innerText = `✅ Order Ready!\nServer ID: ${data.server_id}\nDiamonds: ${data.product.diamond}\nOrder ID: ${data.order_id}`;
+        } else if (data.status === "OUT_OF_STOCK") {
+            resultDiv.innerText = "❌ Not enough stock!";
+        } else {
+            resultDiv.innerText = "❌ Error: " + (data.error || "Unknown error");
+        }
+    } catch (err) {
+        console.error(err);
+        resultDiv.innerText = "❌ Failed to contact server";
+    }
+});
+</script>
+
+</body>
+</html>
