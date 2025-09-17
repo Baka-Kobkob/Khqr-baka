@@ -1,67 +1,76 @@
 import express from "express";
-import axios from "axios";
-import dotenv from "dotenv";
-import NodeCache from "node-cache";
+import fs from "fs";
+import path from "path";
 
-dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Initialize cache
-const cacheTTL = parseInt(process.env.CACHE_TTL) || 30;
-const cache = new NodeCache({ stdTTL: cacheTTL });
-
-// Middleware to parse JSON bodies
 app.use(express.json());
+app.use(express.static("public"));
 
-// Proxy API endpoint
-app.post("/api/check_payment", async (req, res) => {
-  const { md5 } = req.body;
-  if (!md5) return res.status(400).json({ error: "Missing md5" });
+const productsPath = path.join("./products.json");
+const ordersPath = path.join("./orders.json");
 
-  // Check cache first
-  const cached = cache.get(md5);
-  if (cached) {
-    return res.json({ status: cached, source: "cache" });
-  }
-
-  try {
-    // Call Bakong API
-    const response = await axios.post(
-      process.env.BAKONG_API_URL,
-      { md5 },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.BAKONG_API_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 5000
-      }
-    );
-
-    // Determine status
-    const bakongData = response.data;
-    let status = "UNPAID";
-
-    if (bakongData && bakongData.responseCode === 0) {
-      status = "PAID";
+// Load JSON safely
+function loadJSON(file) {
+    try {
+        return JSON.parse(fs.readFileSync(file, "utf-8"));
+    } catch (e) {
+        console.error(`Error reading ${file}:`, e);
+        return null;
     }
+}
 
-    // Save to cache
-    cache.set(md5, status);
+// Save JSON safely
+function saveJSON(file, data) {
+    try {
+        fs.writeFileSync(file, JSON.stringify(data, null, 2));
+        return true;
+    } catch (e) {
+        console.error(`Error writing ${file}:`, e);
+        return false;
+    }
+}
 
-    return res.json({ status, source: "bakong" });
-  } catch (err) {
-    console.error("Error checking Bakong payment:", err.message);
-    return res.status(500).json({ error: "Failed to check payment" });
-  }
+// API: Get stock & create order
+app.post("/api/get_stock", (req, res) => {
+    const { user_id, product_id, quantity } = req.body;
+
+    if (!user_id || !product_id || !quantity)
+        return res.status(400).json({ error: "Missing parameters" });
+
+    const products = loadJSON(productsPath);
+    if (!products) return res.status(500).json({ error: "Cannot load products" });
+
+    const product = products[product_id];
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    if (product.stock < quantity) return res.json({ status: "OUT_OF_STOCK", product });
+
+    // Decrement stock
+    product.stock -= quantity;
+    if (!saveJSON(productsPath, products))
+        return res.status(500).json({ error: "Cannot update products" });
+
+    // Create order
+    const orders = loadJSON(ordersPath);
+    if (!orders) return res.status(500).json({ error: "Cannot load orders" });
+
+    const order = {
+        order_id: Date.now(),
+        user_id,
+        product_id,
+        quantity,
+        status: "pending",
+        created_at: new Date()
+    };
+    orders.push(order);
+    if (!saveJSON(ordersPath, orders))
+        return res.status(500).json({ error: "Cannot save order" });
+
+    res.json({ status: "OK", server_id: product.server_id, product, order_id: order.order_id });
 });
 
-// Health check endpoint
-app.get("/", (req, res) => {
-  res.send("✅ Bakong Proxy API is running");
-});
+// Health check
+app.get("/", (req, res) => res.send("✅ Diamond Top-up API running"));
 
-app.listen(PORT, () => {
-  console.log(`✅ Bakong Proxy running on port ${PORT}`);
-});
+// Start server
+app.listen(3000, () => console.log("✅ Server running on port 3000"));
